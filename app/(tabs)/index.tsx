@@ -1,98 +1,244 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { StatusBar } from "expo-status-bar";
+import { Image, StyleSheet, useWindowDimensions, View } from "react-native";
+import Animated, {
+  Extrapolate,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+type PhotoItem = {
+  id: string;
+  uri: string;
+  label: string;
+};
+
+const SAMPLE_PHOTOS: PhotoItem[] = [
+  {
+    id: "1",
+    uri: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1000&q=80",
+    label: "Trail",
+  },
+  {
+    id: "2",
+    uri: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1000&q=80",
+    label: "Summit",
+  },
+  {
+    id: "3",
+    uri: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1000&q=80",
+    label: "Dune",
+  },
+  {
+    id: "4",
+    uri: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1000&q=80",
+    label: "Lake",
+  },
+  {
+    id: "5",
+    uri: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1000&q=80",
+    label: "Night",
+  },
+  {
+    id: "6",
+    uri: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1000&q=80",
+    label: "Forest",
+  },
+  {
+    id: "7",
+    uri: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1000&q=80",
+    label: "Ridge",
+  },
+  {
+    id: "8",
+    uri: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1000&q=80",
+    label: "Desert",
+  },
+];
+
+const ARC_SCALE = 0.85;
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { width, height } = useWindowDimensions();
+  const scrollY = useSharedValue(0);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  const itemSize = Math.min(width * 0.62, 280);
+  const itemSpacing = Math.round(itemSize * 0.22);
+  const itemFullSize = itemSize + itemSpacing;
+  const radius = Math.max((height - itemSize) / 2, itemSize) * ARC_SCALE;
+  const centerY = height / 2;
+  const baseX = (width - itemSize) / 2 + 16;
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const contentPadding = (height - itemSize) / 2;
+
+  return (
+    <View style={styles.container}>
+      <StatusBar hidden />
+      <Animated.FlatList
+        data={SAMPLE_PHOTOS}
+        keyExtractor={(item) => item.id}
+        showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={16}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingVertical: Math.max(24, contentPadding) },
+        ]}
+        renderItem={({ item, index }) => (
+          <DialItem
+            item={item}
+            index={index}
+            scrollY={scrollY}
+            itemSize={itemSize}
+            itemFullSize={itemFullSize}
+            radius={radius}
+            centerY={centerY}
+            baseX={baseX}
+            contentPadding={contentPadding}
+          />
+        )}
+      />
+    </View>
+  );
+}
+
+type DialItemProps = {
+  item: PhotoItem;
+  index: number;
+  scrollY: Animated.SharedValue<number>;
+  itemSize: number;
+  itemFullSize: number;
+  radius: number;
+  centerY: number;
+  baseX: number;
+  contentPadding: number;
+};
+
+function DialItem({
+  item,
+  index,
+  scrollY,
+  itemSize,
+  itemFullSize,
+  radius,
+  centerY,
+  baseX,
+  contentPadding,
+}: DialItemProps) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const itemCenterY = index * itemFullSize + contentPadding;
+    const relativeY = itemCenterY - scrollY.value;
+    const offsetFromCenter = relativeY - centerY + itemSize / 2;
+    const clamped = Math.min(Math.max(offsetFromCenter, -radius), radius);
+    const x =
+      radius - Math.sqrt(Math.max(radius * radius - clamped * clamped, 0));
+    const progress = Math.min(Math.abs(offsetFromCenter) / radius, 1);
+
+    const scale = interpolate(progress, [0, 1], [1, 0.78], Extrapolate.CLAMP);
+    const opacity = interpolate(
+      progress,
+      [0, 0.7, 1],
+      [1, 0.6, 0.35],
+      Extrapolate.CLAMP,
+    );
+    const rotate = interpolate(
+      offsetFromCenter,
+      [-radius, 0, radius],
+      [-0.35, 0, 0.35],
+      Extrapolate.CLAMP,
+    );
+
+    return {
+      transform: [
+        { translateX: baseX - x },
+        { scale },
+        { rotateZ: `${rotate}rad` },
+      ],
+      opacity,
+    };
+  });
+
+  const dimStyle = useAnimatedStyle(() => {
+    const itemCenterY = index * itemFullSize;
+    const relativeY = itemCenterY - scrollY.value;
+    const offsetFromCenter = relativeY - centerY + itemSize / 2;
+    const progress = Math.min(Math.abs(offsetFromCenter) / (radius * 0.7), 1);
+    const overlayOpacity = interpolate(
+      progress,
+      [0, 1],
+      [0, 0.45],
+      Extrapolate.CLAMP,
+    );
+    return {
+      opacity: overlayOpacity,
+    };
+  });
+
+  return (
+    <View style={[styles.itemWrap, { height: itemFullSize }]}>
+      <Animated.View
+        style={[
+          styles.card,
+          animatedStyle,
+          { width: itemSize, height: itemSize },
+        ]}
+      >
+        <Image source={{ uri: item.uri }} style={styles.image} />
+        <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
+        <View style={styles.labelWrap}>
+          <View style={styles.labelPill} />
+        </View>
+      </Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: "#000000",
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  listContent: {
+    paddingHorizontal: 16,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  itemWrap: {
+    justifyContent: "center",
+  },
+  card: {
+    borderRadius: 24,
+    overflow: "hidden",
+    backgroundColor: "#111",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 12 },
+  },
+  image: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+  },
+  dim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
+  },
+  labelWrap: {
+    position: "absolute",
+    left: 16,
+    bottom: 16,
+    right: 16,
+  },
+  labelPill: {
+    height: 6,
+    width: 56,
+    borderRadius: 99,
+    backgroundColor: "rgba(255,255,255,0.75)",
   },
 });
