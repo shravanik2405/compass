@@ -1,17 +1,36 @@
 import { StatusBar } from "expo-status-bar";
-import { Image, StyleSheet, useWindowDimensions, View } from "react-native";
+import { useRef, useState } from "react";
+import {
+  Image,
+  Modal,
+  Pressable,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  Easing,
   Extrapolate,
   interpolate,
+  runOnJS,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
+  withTiming,
 } from "react-native-reanimated";
 
 type PhotoItem = {
   id: string;
   uri: string;
   label: string;
+};
+
+type LayoutBox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 const SAMPLE_PHOTOS: PhotoItem[] = [
@@ -89,6 +108,16 @@ const ARC_EDGE_SOFTEN = 0.98;
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const scrollY = useSharedValue(0);
+  const [activePhoto, setActivePhoto] = useState<PhotoItem | null>(null);
+  const [modalVisible, setModalVisible] = useState(false);
+  const modalOpacity = useSharedValue(0);
+  const backdropOpacity = useSharedValue(0);
+  const imageX = useSharedValue(0);
+  const imageY = useSharedValue(0);
+  const imageW = useSharedValue(0);
+  const imageH = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const originRef = useRef<LayoutBox | null>(null);
 
   const itemSize = Math.min(width * 0.3, 160);
   const itemSpacing = Math.round(itemSize * 0.22);
@@ -104,6 +133,152 @@ export default function HomeScreen() {
   });
 
   const contentPadding = (height - itemSize) / 2;
+
+  const openModal = (item: PhotoItem, origin: LayoutBox | null) => {
+    const fallbackOrigin = {
+      x: (width - itemSize) / 2,
+      y: (height - itemSize) / 2,
+      width: itemSize,
+      height: itemSize,
+    };
+    const safeOrigin =
+      origin && origin.width > 0 && origin.height > 0 ? origin : fallbackOrigin;
+
+    originRef.current = safeOrigin;
+    setActivePhoto(item);
+    setModalVisible(true);
+    modalOpacity.value = 0;
+    backdropOpacity.value = 0;
+    dragY.value = 0;
+    imageX.value = safeOrigin.x;
+    imageY.value = safeOrigin.y;
+    imageW.value = safeOrigin.width;
+    imageH.value = safeOrigin.height;
+    modalOpacity.value = withTiming(1, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+    backdropOpacity.value = withTiming(1, {
+      duration: 320,
+      easing: Easing.out(Easing.cubic),
+    });
+    imageX.value = withTiming(0, {
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
+    });
+    imageY.value = withTiming(0, {
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
+    });
+    imageW.value = withTiming(width, {
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
+    });
+    imageH.value = withTiming(height, {
+      duration: 360,
+      easing: Easing.out(Easing.cubic),
+    });
+  };
+
+  const closeModal = () => {
+    const origin = originRef.current;
+    if (!origin) {
+      modalOpacity.value = withTiming(0, { duration: 220 });
+      backdropOpacity.value = withTiming(0, { duration: 220 });
+      runOnJS(setModalVisible)(false);
+      runOnJS(setActivePhoto)(null);
+      return;
+    }
+    dragY.value = withTiming(0, { duration: 180 });
+    modalOpacity.value = withTiming(1, { duration: 1 });
+    backdropOpacity.value = withTiming(0, {
+      duration: 260,
+      easing: Easing.inOut(Easing.cubic),
+    });
+    imageX.value = withTiming(origin.x, {
+      duration: 320,
+      easing: Easing.inOut(Easing.cubic),
+    });
+    imageY.value = withTiming(origin.y, {
+      duration: 320,
+      easing: Easing.inOut(Easing.cubic),
+    });
+    imageW.value = withTiming(origin.width, {
+      duration: 320,
+      easing: Easing.inOut(Easing.cubic),
+    });
+    imageH.value = withTiming(
+      origin.height,
+      {
+        duration: 320,
+        easing: Easing.inOut(Easing.cubic),
+      },
+      (finished) => {
+        if (finished) {
+          modalOpacity.value = withTiming(
+            0,
+            { duration: 180, easing: Easing.in(Easing.cubic) },
+            (done) => {
+              if (done) {
+                runOnJS(setModalVisible)(false);
+                runOnJS(setActivePhoto)(null);
+              }
+            },
+          );
+        }
+      },
+    );
+  };
+
+  const modalStyle = useAnimatedStyle(() => ({
+    opacity: modalOpacity.value,
+  }));
+
+  const imageStyle = useAnimatedStyle(() => {
+    const translateY = Math.max(dragY.value, 0);
+    const scale = interpolate(
+      translateY,
+      [0, height * 0.6],
+      [1, 0.86],
+      Extrapolate.CLAMP,
+    );
+    return {
+      position: "absolute",
+      left: imageX.value,
+      top: imageY.value,
+      width: imageW.value,
+      height: imageH.value,
+      transform: [{ translateY }, { scale }],
+    };
+  });
+
+  const backdropStyle = useAnimatedStyle(() => {
+    const fade = interpolate(
+      Math.max(dragY.value, 0),
+      [0, height * 0.6],
+      [1, 0],
+      Extrapolate.CLAMP,
+    );
+    return {
+      opacity: backdropOpacity.value * fade,
+    };
+  });
+
+  const dragGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      if (event.translationY > 0) {
+        dragY.value = event.translationY;
+      }
+    })
+    .onEnd((event) => {
+      const shouldClose =
+        event.translationY > height * 0.18 || event.velocityY > 1200;
+      if (shouldClose) {
+        runOnJS(closeModal)();
+      } else {
+        dragY.value = withTiming(0, { duration: 220 });
+      }
+    });
 
   return (
     <View style={styles.container}>
@@ -129,9 +304,31 @@ export default function HomeScreen() {
             centerY={centerY}
             baseX={baseX}
             contentPadding={contentPadding}
+            onPress={openModal}
           />
         )}
       />
+      <Modal
+        transparent
+        visible={modalVisible}
+        animationType="none"
+        onRequestClose={closeModal}
+      >
+        <Animated.View style={[styles.modalOverlay, modalStyle]}>
+          <Animated.View style={[styles.modalBackdrop, backdropStyle]} />
+          {activePhoto ? (
+            <GestureDetector gesture={dragGesture}>
+              <Animated.View style={imageStyle}>
+                <Image
+                  source={{ uri: activePhoto.uri }}
+                  style={styles.modalImage}
+                />
+              </Animated.View>
+            </GestureDetector>
+          ) : null}
+          <Pressable style={styles.modalTapLayer} onPress={closeModal} />
+        </Animated.View>
+      </Modal>
     </View>
   );
 }
@@ -146,6 +343,7 @@ type DialItemProps = {
   centerY: number;
   baseX: number;
   contentPadding: number;
+  onPress: (item: PhotoItem, origin: LayoutBox | null) => void;
 };
 
 function DialItem({
@@ -158,7 +356,9 @@ function DialItem({
   centerY,
   baseX,
   contentPadding,
+  onPress,
 }: DialItemProps) {
+  const cardRef = useRef<View>(null);
   const animatedStyle = useAnimatedStyle(() => {
     const itemCenterY = index * itemFullSize + contentPadding;
     const relativeY = itemCenterY - scrollY.value;
@@ -166,12 +366,14 @@ function DialItem({
     const boostedOffset = offsetFromCenter * MOTION_BOOST;
     const safeRadius = radius * ARC_EDGE_SOFTEN;
     const clamped = Math.min(Math.max(boostedOffset, -safeRadius), safeRadius);
+    const arcAngle = clamped / safeRadius;
+    const arcY = safeRadius * Math.sin(arcAngle);
+    const arcDelta = arcY - clamped;
     const x =
       (radius - Math.sqrt(Math.max(radius * radius - clamped * clamped, 0))) *
       1.35;
     const progress = Math.min(Math.abs(boostedOffset) / safeRadius, 1);
 
-    const scale = interpolate(progress, [0, 1], [1, 0.78], Extrapolate.CLAMP);
     const opacity = interpolate(
       progress,
       [0, 0.6, 1],
@@ -187,8 +389,8 @@ function DialItem({
 
     return {
       transform: [
+        { translateY: arcDelta },
         { translateX: baseX - x },
-        { scale },
         { rotateZ: `${rotate}rad` },
       ],
       opacity,
@@ -217,16 +419,25 @@ function DialItem({
 
   return (
     <View style={[styles.itemWrap, { height: itemFullSize }]}>
-      <Animated.View
-        style={[
-          styles.card,
-          animatedStyle,
-          { width: itemSize, height: itemSize },
-        ]}
+      <Pressable
+        onPress={() => {
+          cardRef.current?.measureInWindow((x, y, width, height) => {
+            onPress(item, { x, y, width, height });
+          });
+        }}
       >
-        <Image source={{ uri: item.uri }} style={styles.image} />
-        <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
-      </Animated.View>
+        <Animated.View
+          ref={cardRef}
+          style={[
+            styles.card,
+            animatedStyle,
+            { width: itemSize, height: itemSize },
+          ]}
+        >
+          <Image source={{ uri: item.uri }} style={styles.image} />
+          <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
+        </Animated.View>
+      </Pressable>
     </View>
   );
 }
@@ -271,5 +482,21 @@ const styles = StyleSheet.create({
     width: 56,
     borderRadius: 99,
     backgroundColor: "rgba(255,255,255,0.75)",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  modalBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "#000",
+  },
+  modalTapLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  modalImage: {
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
   },
 });
