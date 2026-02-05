@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -10,14 +10,15 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
-  Easing,
   Extrapolate,
   interpolate,
   runOnJS,
+  SharedValue,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
-  withTiming,
+  withSpring,
+  withTiming
 } from "react-native-reanimated";
 
 type PhotoItem = {
@@ -36,82 +37,88 @@ type LayoutBox = {
 const SAMPLE_PHOTOS: PhotoItem[] = [
   {
     id: "1",
-    uri: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1000&q=80",
-    label: "Trail",
+    uri: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Alps",
   },
   {
     id: "2",
-    uri: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1000&q=80",
+    uri: "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&h=1800&q=90",
     label: "Summit",
   },
   {
     id: "3",
-    uri: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1000&q=80",
-    label: "Dune",
+    uri: "https://images.unsplash.com/photo-1518173946687-a4c036bc3b25?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Autumn",
   },
   {
     id: "4",
-    uri: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1000&q=80",
-    label: "Lake",
+    uri: "https://images.unsplash.com/photo-1433086966358-54859d0ed716?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Waterfall",
   },
   {
     id: "5",
-    uri: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1000&q=80",
-    label: "Night",
+    uri: "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Valley",
   },
   {
     id: "6",
-    uri: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1000&q=80",
+    uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=1200&h=1800&q=90",
     label: "Forest",
   },
   {
     id: "7",
-    uri: "https://images.unsplash.com/photo-1469474968028-56623f02e42e?auto=format&fit=crop&w=1000&q=80",
-    label: "Ridge",
+    uri: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Foggy",
   },
   {
     id: "8",
-    uri: "https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1000&q=80",
-    label: "Desert",
+    uri: "https://images.unsplash.com/photo-1426604966848-d7adac402bff?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Lake",
   },
   {
     id: "9",
-    uri: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1000&q=80",
+    uri: "https://images.unsplash.com/photo-1465056836041-7f43ac27dcb5?auto=format&fit=crop&w=1200&h=1800&q=90",
     label: "Canyon",
   },
   {
     id: "10",
-    uri: "https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1000&q=80",
+    uri: "https://images.unsplash.com/photo-1414609245224-afa02bfb3fda?auto=format&fit=crop&w=1200&h=1800&q=90",
     label: "Peak",
   },
   {
     id: "11",
-    uri: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=1000&q=80",
-    label: "Oasis",
+    uri: "https://images.unsplash.com/photo-1439853949127-fa647f8c5c6b?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Sunset",
   },
   {
     id: "12",
-    uri: "https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=1000&q=80",
-    label: "River",
+    uri: "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Hills",
   },
   {
     id: "13",
-    uri: "https://images.unsplash.com/photo-1504384308090-c894fdcc538d?auto=format&fit=crop&w=1000&q=80",
-    label: "Ocean",
+    uri: "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Beach",
   },
 ];
 
-const ARC_SCALE = 1.2;
+const ARC_SCALE = 1.5;
 const MOTION_BOOST = 1.05;
 const ARC_EDGE_SOFTEN = 0.98;
 
+const LOOP_COPIES = 3;
+const LOOP_DATA: PhotoItem[] = Array.from({ length: LOOP_COPIES }, () => SAMPLE_PHOTOS).flat();
+const LOOP_N = SAMPLE_PHOTOS.length;
+
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
-  const scrollY = useSharedValue(0);
+  const scrollY = useSharedValue(LOOP_N * (height / 9));
+  const listRef = useRef<Animated.FlatList<PhotoItem>>(null);
   const [activePhoto, setActivePhoto] = useState<PhotoItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const modalOpacity = useSharedValue(0);
   const backdropOpacity = useSharedValue(0);
+  const openProgress = useSharedValue(0);
   const imageX = useSharedValue(0);
   const imageY = useSharedValue(0);
   const imageW = useSharedValue(0);
@@ -119,20 +126,42 @@ export default function HomeScreen() {
   const dragY = useSharedValue(0);
   const originRef = useRef<LayoutBox | null>(null);
 
-  const itemSize = Math.min(width * 0.3, 160);
-  const itemSpacing = Math.round(itemSize * 0.22);
-  const itemFullSize = itemSize + itemSpacing;
+  const itemFullSize = height / 9;
+  const itemSize = Math.min(itemFullSize * 0.84, width * 0.336);
+  const itemSpacing = itemFullSize - itemSize;
   const radius = Math.max((height - itemSize) / 2, itemSize) * ARC_SCALE;
   const centerY = height / 2;
   const baseX = (width - itemSize) / 2 + 16;
 
+  useEffect(() => {
+    const offset = LOOP_N * itemFullSize;
+    const t = setTimeout(() => {
+      listRef.current?.scrollToOffset({ offset, animated: false });
+      scrollY.value = offset;
+    }, 50);
+    return () => clearTimeout(t);
+  }, [itemFullSize]);
+
+  const applyScrollJump = (newOffset: number) => {
+    listRef.current?.scrollToOffset({ offset: newOffset, animated: false });
+    scrollY.value = newOffset;
+  };
+
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
-      scrollY.value = event.contentOffset.y;
+      const y = event.contentOffset.y;
+      scrollY.value = y;
+      const threshold = itemFullSize * 0.5;
+      const maxOffset = (LOOP_COPIES * LOOP_N - 1) * itemFullSize - threshold;
+      if (y < threshold) {
+        runOnJS(applyScrollJump)(y + LOOP_N * itemFullSize);
+      } else if (y > maxOffset) {
+        runOnJS(applyScrollJump)(y - LOOP_N * itemFullSize);
+      }
     },
   });
 
-  const contentPadding = (height - itemSize) / 2;
+  const contentPadding = (height - itemFullSize) / 2;
 
   const openModal = (item: PhotoItem, origin: LayoutBox | null) => {
     const fallbackOrigin = {
@@ -147,37 +176,35 @@ export default function HomeScreen() {
     originRef.current = safeOrigin;
     setActivePhoto(item);
     setModalVisible(true);
-    modalOpacity.value = 0;
+    modalOpacity.value = 1;
     backdropOpacity.value = 0;
+    openProgress.value = 0;
     dragY.value = 0;
+    
+    // Start from tile's actual position and size (square with rounded corners)
     imageX.value = safeOrigin.x;
     imageY.value = safeOrigin.y;
     imageW.value = safeOrigin.width;
     imageH.value = safeOrigin.height;
-    modalOpacity.value = withTiming(1, {
-      duration: 320,
-      easing: Easing.out(Easing.cubic),
-    });
-    backdropOpacity.value = withTiming(1, {
-      duration: 320,
-      easing: Easing.out(Easing.cubic),
-    });
-    imageX.value = withTiming(0, {
-      duration: 360,
-      easing: Easing.out(Easing.cubic),
-    });
-    imageY.value = withTiming(0, {
-      duration: 360,
-      easing: Easing.out(Easing.cubic),
-    });
-    imageW.value = withTiming(width, {
-      duration: 360,
-      easing: Easing.out(Easing.cubic),
-    });
-    imageH.value = withTiming(height, {
-      duration: 360,
-      easing: Easing.out(Easing.cubic),
-    });
+    
+    // Don't animate backdrop during opening - keep arc visible
+    // Backdrop will only show based on image size in backdropStyle
+    backdropOpacity.value = 1;
+    
+    // Spring animation for the genie "growing" effect
+    const springConfig = {
+      damping: 20,
+      stiffness: 85,
+      mass: 0.9,
+    };
+    
+    openProgress.value = withSpring(1, springConfig);
+    // Animate position to fullscreen
+    imageX.value = withSpring(0, springConfig);
+    imageY.value = withSpring(0, springConfig);
+    // Animate size from tile to fullscreen
+    imageW.value = withSpring(width, springConfig);
+    imageH.value = withSpring(height, springConfig);
   };
 
   const closeModal = () => {
@@ -189,45 +216,31 @@ export default function HomeScreen() {
       runOnJS(setActivePhoto)(null);
       return;
     }
+    
     dragY.value = withTiming(0, { duration: 180 });
     modalOpacity.value = withTiming(1, { duration: 1 });
-    backdropOpacity.value = withTiming(0, {
-      duration: 260,
-      easing: Easing.inOut(Easing.cubic),
+    backdropOpacity.value = withTiming(0, { duration: 300 });
+    
+    // Faster spring config for closing - compensate for shrink feeling faster
+    const springConfig = {
+      damping: 22,
+      stiffness: 65,
+      mass: 1.0,
+    };
+    
+    // Animate position back to tile
+    imageX.value = withSpring(origin.x, springConfig);
+    imageY.value = withSpring(origin.y, springConfig);
+    // Animate size back to tile size
+    imageW.value = withSpring(origin.width, springConfig);
+    imageH.value = withSpring(origin.height, springConfig, (finished) => {
+      if (finished) {
+        // Immediately hide modal when animation reaches tile position
+        runOnJS(setModalVisible)(false);
+        runOnJS(setActivePhoto)(null);
+      }
     });
-    imageX.value = withTiming(origin.x, {
-      duration: 320,
-      easing: Easing.inOut(Easing.cubic),
-    });
-    imageY.value = withTiming(origin.y, {
-      duration: 320,
-      easing: Easing.inOut(Easing.cubic),
-    });
-    imageW.value = withTiming(origin.width, {
-      duration: 320,
-      easing: Easing.inOut(Easing.cubic),
-    });
-    imageH.value = withTiming(
-      origin.height,
-      {
-        duration: 320,
-        easing: Easing.inOut(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) {
-          modalOpacity.value = withTiming(
-            0,
-            { duration: 180, easing: Easing.in(Easing.cubic) },
-            (done) => {
-              if (done) {
-                runOnJS(setModalVisible)(false);
-                runOnJS(setActivePhoto)(null);
-              }
-            },
-          );
-        }
-      },
-    );
+    openProgress.value = withSpring(0, springConfig);
   };
 
   const modalStyle = useAnimatedStyle(() => ({
@@ -236,31 +249,49 @@ export default function HomeScreen() {
 
   const imageStyle = useAnimatedStyle(() => {
     const translateY = Math.max(dragY.value, 0);
-    const scale = interpolate(
+    const dragScale = interpolate(
       translateY,
       [0, height * 0.6],
       [1, 0.86],
       Extrapolate.CLAMP,
     );
+    
+    // Keep rounded corners constant throughout animation
+    const radius = 24;
+    
     return {
       position: "absolute",
       left: imageX.value,
       top: imageY.value,
       width: imageW.value,
       height: imageH.value,
-      transform: [{ translateY }, { scale }],
+      borderRadius: radius,
+      overflow: "hidden",
+      transform: [{ translateY }, { scale: dragScale }],
     };
   });
 
+
+
   const backdropStyle = useAnimatedStyle(() => {
-    const fade = interpolate(
+    // Backdrop only appears when image is near fullscreen
+    const sizeProgress = interpolate(
+      imageW.value,
+      [itemSize, width * 0.85, width],
+      [0, 0, 1],
+      Extrapolate.CLAMP,
+    );
+    
+    // Also fade out when dragging to close
+    const dragFade = interpolate(
       Math.max(dragY.value, 0),
       [0, height * 0.6],
       [1, 0],
       Extrapolate.CLAMP,
     );
+    
     return {
-      opacity: backdropOpacity.value * fade,
+      opacity: backdropOpacity.value * sizeProgress * dragFade,
     };
   });
 
@@ -284,11 +315,22 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <StatusBar hidden />
       <Animated.FlatList
-        data={SAMPLE_PHOTOS}
-        keyExtractor={(item) => item.id}
+        ref={listRef}
+        initialScrollIndex={LOOP_N}
+        snapToInterval={itemFullSize}
+        decelerationRate={0.994}
+        snapToAlignment="center"
+        data={LOOP_DATA}
+        keyExtractor={(_, index) => `tile-${index}`}
+        getItemLayout={(_, index) => ({
+          length: itemFullSize,
+          offset: contentPadding + index * itemFullSize,
+          index,
+        })}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
-        scrollEventThrottle={16}
+        scrollEventThrottle={8}
+        removeClippedSubviews={false}
         contentContainerStyle={[
           styles.listContent,
           { paddingVertical: Math.max(24, contentPadding) },
@@ -321,7 +363,8 @@ export default function HomeScreen() {
               <Animated.View style={imageStyle}>
                 <Image
                   source={{ uri: activePhoto.uri }}
-                  style={styles.modalImage}
+                  style={styles.modalImageFill}
+                  resizeMode="cover"
                 />
               </Animated.View>
             </GestureDetector>
@@ -336,7 +379,7 @@ export default function HomeScreen() {
 type DialItemProps = {
   item: PhotoItem;
   index: number;
-  scrollY: Animated.SharedValue<number>;
+  scrollY: SharedValue<number>;
   itemSize: number;
   itemFullSize: number;
   radius: number;
@@ -359,62 +402,116 @@ function DialItem({
   onPress,
 }: DialItemProps) {
   const cardRef = useRef<View>(null);
+  const X_MULT = 1.15; // reduce to tighten edges, increase to widen
+
+  // const animatedStyle = useAnimatedStyle(() => {
+  //   const itemCenterY = index * itemFullSize + contentPadding;
+  //   const relativeY = itemCenterY - scrollY.value;
+  //   const offsetFromCenter = relativeY - centerY + itemSize / 2;
+  //   const boostedOffset = offsetFromCenter * MOTION_BOOST;
+  //   const safeRadius = radius * ARC_EDGE_SOFTEN;
+  //   const clamped = Math.min(Math.max(boostedOffset, -safeRadius), safeRadius);
+  //   const arcAngle = clamped / safeRadius;
+  //   const x =
+  //     (radius - Math.sqrt(Math.max(radius * radius - clamped * clamped, 0))) *
+  //     1.35;
+  //   const progress = Math.min(Math.abs(boostedOffset) / safeRadius, 1);
+
+  //   const opacity = interpolate(
+  //     progress,
+  //     [0, 0.5, 1],
+  //     [1, 0.7, 0.35],
+  //     Extrapolate.CLAMP,
+  //   );
+  //   const rotate = arcAngle;
+
+  //   return {
+  //     transform: [
+  //       { translateX: baseX - x },
+  //       { rotateZ: `${rotate}rad` },
+  //     ],
+  //     opacity,
+  //   };
+  // });
   const animatedStyle = useAnimatedStyle(() => {
-    const itemCenterY = index * itemFullSize + contentPadding;
+    // Calculate distance from center
+    const itemCenterY =
+      index * itemFullSize + contentPadding + itemFullSize / 2;
+
     const relativeY = itemCenterY - scrollY.value;
-    const offsetFromCenter = relativeY - centerY + itemSize / 2;
+    const offsetFromCenter = relativeY - centerY;
+
     const boostedOffset = offsetFromCenter * MOTION_BOOST;
     const safeRadius = radius * ARC_EDGE_SOFTEN;
+
+    // Clamp for progress calculation
     const clamped = Math.min(Math.max(boostedOffset, -safeRadius), safeRadius);
-    const arcAngle = clamped / safeRadius;
-    const arcY = safeRadius * Math.sin(arcAngle);
-    const arcDelta = arcY - clamped;
-    const x =
-      (radius - Math.sqrt(Math.max(radius * radius - clamped * clamped, 0))) *
-      1.35;
-    const progress = Math.min(Math.abs(boostedOffset) / safeRadius, 1);
+
+    // Only horizontal arc offset - no Y correction for uniform spacing
+    const xOnArc = safeRadius * (1 - Math.cos(clamped / safeRadius)) * X_MULT;
+
+    const progress = Math.min(Math.abs(clamped) / safeRadius, 1);
 
     const opacity = interpolate(
       progress,
       [0, 0.6, 1],
-      [1, 0.8, 0.5],
+      [1, 0.75, 0.4],
       Extrapolate.CLAMP,
     );
-    const rotate = interpolate(
-      boostedOffset,
-      [-radius, 0, radius],
-      [-0.35, 0, 0.35],
+
+    // Stronger shadow at center for elevation
+    const shadowOpacity = interpolate(
+      progress,
+      [0, 0.5, 1],
+      [0.6, 0.45, 0.35],
+      Extrapolate.CLAMP,
+    );
+    const shadowRadius = interpolate(
+      progress,
+      [0, 0.5, 1],
+      [24, 20, 14],
+      Extrapolate.CLAMP,
+    );
+    const shadowOffsetHeight = interpolate(
+      progress,
+      [0, 0.5, 1],
+      [16, 14, 10],
       Extrapolate.CLAMP,
     );
 
     return {
       transform: [
-        { translateY: arcDelta },
-        { translateX: baseX - x },
-        { rotateZ: `${rotate}rad` },
+        { translateX: baseX - xOnArc },
       ],
       opacity,
+      shadowColor: "#000",
+      shadowOpacity,
+      shadowRadius,
+      shadowOffset: { width: 0, height: shadowOffsetHeight },
     };
   });
 
   const dimStyle = useAnimatedStyle(() => {
-    const itemCenterY = index * itemFullSize + contentPadding;
+    const itemCenterY =
+      index * itemFullSize + contentPadding + itemFullSize / 2;
+
     const relativeY = itemCenterY - scrollY.value;
-    const offsetFromCenter = relativeY - centerY + itemSize / 2;
+    const offsetFromCenter = relativeY - centerY;
+
     const boostedOffset = offsetFromCenter * MOTION_BOOST;
-    const progress = Math.min(
-      Math.abs(boostedOffset) / (radius * 0.7 * ARC_EDGE_SOFTEN),
-      1,
-    );
+    const safeRadius = radius * ARC_EDGE_SOFTEN;
+    const clamped = Math.min(Math.max(boostedOffset, -safeRadius), safeRadius);
+
+    const progress = Math.min(Math.abs(clamped) / (safeRadius * 0.7), 1);
+
     const overlayOpacity = interpolate(
       progress,
       [0, 0.5, 1],
-      [0, 0.6, 0.75],
+      [0, 0.3, 0.6],
       Extrapolate.CLAMP,
     );
-    return {
-      opacity: overlayOpacity,
-    };
+
+    return { opacity: overlayOpacity };
   });
 
   return (
@@ -485,7 +582,7 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: "#000",
+    backgroundColor: "transparent",
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
@@ -495,8 +592,13 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   modalImage: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+  },
+  modalImageFill: {
     width: "100%",
     height: "100%",
-    resizeMode: "cover",
+    borderRadius: 24,
   },
 });
