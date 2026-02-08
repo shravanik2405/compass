@@ -105,6 +105,7 @@ const SAMPLE_PHOTOS: PhotoItem[] = [
 const ARC_SCALE = 1.5;
 const MOTION_BOOST = 1.05;
 const ARC_EDGE_SOFTEN = 0.98;
+const IMG_ASPECT = 2 / 3; // Source images are 1200x1800
 
 const LOOP_COPIES = 3;
 const LOOP_DATA: PhotoItem[] = Array.from({ length: LOOP_COPIES }, () => SAMPLE_PHOTOS).flat();
@@ -271,18 +272,35 @@ export default function HomeScreen() {
     };
   });
 
-  // Inner image rendered at full screen size, positioned to center within container
+  // Fixed layout size for the inner image — always at fullscreen-cover dimensions
+  // so React Native always decodes at high resolution (no pixelation).
+  const fullCoverW = Math.max(width, height * IMG_ASPECT);
+  const fullCoverH = fullCoverW / IMG_ASPECT;
+
+  // Transforms scale + position the full-res image to show the correct "cover"
+  // crop for the current container size. The container's overflow:hidden clips it.
   const innerImageStyle = useAnimatedStyle(() => {
-    // Center the full-size image within the animated container
-    const offsetX = -(width - imageW.value) / 2;
-    const offsetY = -(height - imageH.value) / 2;
-    
+    const cW = imageW.value;
+    const cH = imageH.value;
+
+    // Cover scale: how much to shrink the full-res image for this container
+    const containerAR = cW / cH;
+    const S = IMG_ASPECT >= containerAR
+      ? cH / fullCoverH   // fill-height mode (tall container, e.g. fullscreen)
+      : cW / fullCoverW;  // fill-width mode  (wide container, e.g. square tile)
+
+    // Center the image in the container (translate applied before scale,
+    // so offset is in unscaled coordinate space)
+    const tx = (cW - fullCoverW) / 2;
+    const ty = (cH - fullCoverH) / 2;
+
     return {
-      width: width,
-      height: height,
+      width: fullCoverW,
+      height: fullCoverH,
       transform: [
-        { translateX: offsetX },
-        { translateY: offsetY },
+        { translateX: tx },
+        { translateY: ty },
+        { scale: S },
       ],
     };
   });
