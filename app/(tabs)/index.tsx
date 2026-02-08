@@ -257,7 +257,7 @@ export default function HomeScreen() {
     );
     
     // Keep rounded corners constant throughout animation
-    const radius = 24;
+    const cornerRadius = 24;
     
     return {
       position: "absolute",
@@ -265,9 +265,25 @@ export default function HomeScreen() {
       top: imageY.value,
       width: imageW.value,
       height: imageH.value,
-      borderRadius: radius,
+      borderRadius: cornerRadius,
       overflow: "hidden",
       transform: [{ translateY }, { scale: dragScale }],
+    };
+  });
+
+  // Inner image rendered at full screen size, positioned to center within container
+  const innerImageStyle = useAnimatedStyle(() => {
+    // Center the full-size image within the animated container
+    const offsetX = -(width - imageW.value) / 2;
+    const offsetY = -(height - imageH.value) / 2;
+    
+    return {
+      width: width,
+      height: height,
+      transform: [
+        { translateX: offsetX },
+        { translateY: offsetY },
+      ],
     };
   });
 
@@ -361,9 +377,9 @@ export default function HomeScreen() {
           {activePhoto ? (
             <GestureDetector gesture={dragGesture}>
               <Animated.View style={imageStyle}>
-                <Image
+                <Animated.Image
                   source={{ uri: activePhoto.uri }}
-                  style={styles.modalImageFill}
+                  style={innerImageStyle}
                   resizeMode="cover"
                 />
               </Animated.View>
@@ -596,9 +612,5 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
   },
-  modalImageFill: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 24,
-  },
+
 });
