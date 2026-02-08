@@ -1,5 +1,6 @@
+import Constants from "expo-constants";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import React, { Suspense, useEffect, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -9,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useImageColors } from "@/hooks/use-image-colors";
 import Animated, {
   Extrapolate,
   interpolate,
@@ -111,6 +113,30 @@ const LOOP_COPIES = 3;
 const LOOP_DATA: PhotoItem[] = Array.from({ length: LOOP_COPIES }, () => SAMPLE_PHOTOS).flat();
 const LOOP_N = SAMPLE_PHOTOS.length;
 
+// Lazy-load AmbientGlow so the app runs in Expo Go (no Skia native module).
+// In a dev client after prebuild, the glow will load and render.
+type AmbientGlowLazyProps = {
+  scrollY: SharedValue<number>;
+  colors: { primary: string; secondary: string }[];
+  itemFullSize: number;
+  centerY: number;
+  width: number;
+  height: number;
+};
+const AmbientGlowLazy = React.lazy(
+  (() =>
+    import("@/components/ambient-glow")
+      .then((m) => ({
+        default:
+          m.AmbientGlow ??
+          (m as { default?: React.ComponentType<AmbientGlowLazyProps> }).default ??
+          (() => null),
+      }))
+      .catch(() => ({ default: (() => null) as React.ComponentType<AmbientGlowLazyProps> }))) as () => Promise<{
+    default: React.ComponentType<AmbientGlowLazyProps>;
+  }>
+);
+
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
   const scrollY = useSharedValue(LOOP_N * (height / 9));
@@ -133,6 +159,8 @@ export default function HomeScreen() {
   const radius = Math.max((height - itemSize) / 2, itemSize) * ARC_SCALE;
   const centerY = height / 2;
   const baseX = (width - itemSize) / 2 + 16;
+
+  const imageColors = useImageColors(SAMPLE_PHOTOS);
 
   useEffect(() => {
     const offset = LOOP_N * itemFullSize;
@@ -348,6 +376,18 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
+      {Constants.appOwnership !== "expo" && (
+        <Suspense fallback={null}>
+          <AmbientGlowLazy
+            scrollY={scrollY}
+            colors={imageColors}
+            itemFullSize={itemFullSize}
+            centerY={centerY}
+            width={width}
+            height={height}
+          />
+        </Suspense>
+      )}
       <Animated.FlatList
         ref={listRef}
         initialScrollIndex={LOOP_N}
