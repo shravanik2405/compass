@@ -545,21 +545,8 @@ function DialItem({
 
     const relativeY = itemCenterY - scrollY.value;
     const offsetFromCenter = relativeY - centerY;
-
-    const boostedOffset = offsetFromCenter * MOTION_BOOST;
-    const safeRadius = radius * ARC_EDGE_SOFTEN;
-    const clamped = Math.min(Math.max(boostedOffset, -safeRadius), safeRadius);
-
-    const progress = Math.min(Math.abs(clamped) / (safeRadius * 0.7), 1);
-
-    const overlayOpacity = interpolate(
-      progress,
-      [0, 0.5, 1],
-      [0, 0.3, 0.6],
-      Extrapolate.CLAMP,
-    );
-
-    return { opacity: overlayOpacity };
+    const isFocused = Math.abs(offsetFromCenter) < itemFullSize * 0.35;
+    return { opacity: isFocused ? 0 : 0.45 };
   });
 
   return (
