@@ -1,16 +1,17 @@
-import Constants from "expo-constants";
 import { StatusBar } from "expo-status-bar";
-import React, { Suspense, useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Image,
   Modal,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { useImageColors } from "@/hooks/use-image-colors";
+import { INERTIAL_SCROLL_CONFIG } from "@/constants/scroll";
 import Animated, {
   Extrapolate,
   interpolate,
@@ -20,7 +21,7 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming
+  withTiming,
 } from "react-native-reanimated";
 
 type PhotoItem = {
@@ -109,37 +110,22 @@ const MOTION_BOOST = 1.05;
 const ARC_EDGE_SOFTEN = 0.98;
 const IMG_ASPECT = 2 / 3; // Source images are 1200x1800
 
-const LOOP_COPIES = 3;
+const LOOP_COPIES = 5;
 const LOOP_DATA: PhotoItem[] = Array.from({ length: LOOP_COPIES }, () => SAMPLE_PHOTOS).flat();
 const LOOP_N = SAMPLE_PHOTOS.length;
 
-// Lazy-load AmbientGlow so the app runs in Expo Go (no Skia native module).
-// In a dev client after prebuild, the glow will load and render.
-type AmbientGlowLazyProps = {
-  scrollY: SharedValue<number>;
-  colors: { primary: string; secondary: string }[];
-  itemFullSize: number;
-  centerY: number;
-  width: number;
-  height: number;
-};
-const AmbientGlowLazy = React.lazy(
-  (() =>
-    import("@/components/ambient-glow")
-      .then((m) => ({
-        default:
-          m.AmbientGlow ??
-          (m as { default?: React.ComponentType<AmbientGlowLazyProps> }).default ??
-          (() => null),
-      }))
-      .catch(() => ({ default: (() => null) as React.ComponentType<AmbientGlowLazyProps> }))) as () => Promise<{
-    default: React.ComponentType<AmbientGlowLazyProps>;
-  }>
-);
-
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
-  const scrollY = useSharedValue(LOOP_N * (height / 9));
+  const itemFullSize = height / 9;
+  const itemSize = Math.min(itemFullSize * 0.84, width * 0.336);
+  const radius = Math.max((height - itemSize) / 2, itemSize) * ARC_SCALE;
+  const centerY = height / 2;
+  const baseX = (width - itemSize) / 2 + 16;
+
+  const contentPadding = (height - itemFullSize) / 2;
+  const initialLoopOffset = Math.floor(LOOP_COPIES / 2) * LOOP_N * itemFullSize;
+  const loopAmount = LOOP_N * itemFullSize;
+  const scrollY = useSharedValue(initialLoopOffset);
   const listRef = useRef<Animated.FlatList<PhotoItem>>(null);
   const [activePhoto, setActivePhoto] = useState<PhotoItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
@@ -153,44 +139,37 @@ export default function HomeScreen() {
   const dragY = useSharedValue(0);
   const originRef = useRef<LayoutBox | null>(null);
 
-  const itemFullSize = height / 9;
-  const itemSize = Math.min(itemFullSize * 0.84, width * 0.336);
-  const itemSpacing = itemFullSize - itemSize;
-  const radius = Math.max((height - itemSize) / 2, itemSize) * ARC_SCALE;
-  const centerY = height / 2;
-  const baseX = (width - itemSize) / 2 + 16;
+  const recenterToMiddleCopy = (offsetY: number) => {
+    const wrappedOffset = ((offsetY % loopAmount) + loopAmount) % loopAmount;
+    const nextOffset = initialLoopOffset + wrappedOffset;
+    if (Math.abs(nextOffset - offsetY) < 1) {
+      return;
+    }
 
-  const imageColors = useImageColors(SAMPLE_PHOTOS);
-
-  useEffect(() => {
-    const offset = LOOP_N * itemFullSize;
-    const t = setTimeout(() => {
-      listRef.current?.scrollToOffset({ offset, animated: false });
-      scrollY.value = offset;
-    }, 50);
-    return () => clearTimeout(t);
-  }, [itemFullSize]);
-
-  const applyScrollJump = (newOffset: number) => {
-    listRef.current?.scrollToOffset({ offset: newOffset, animated: false });
-    scrollY.value = newOffset;
+    listRef.current?.scrollToOffset({ offset: nextOffset, animated: false });
+    scrollY.value = nextOffset;
   };
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
-      const y = event.contentOffset.y;
-      scrollY.value = y;
-      const threshold = itemFullSize * 0.5;
-      const maxOffset = (LOOP_COPIES * LOOP_N - 1) * itemFullSize - threshold;
-      if (y < threshold) {
-        runOnJS(applyScrollJump)(y + LOOP_N * itemFullSize);
-      } else if (y > maxOffset) {
-        runOnJS(applyScrollJump)(y - LOOP_N * itemFullSize);
-      }
+      scrollY.value = event.contentOffset.y;
     },
   });
 
-  const contentPadding = (height - itemFullSize) / 2;
+  const onMomentumScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    recenterToMiddleCopy(event.nativeEvent.contentOffset.y);
+  };
+
+  const onScrollEndDrag = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ) => {
+    const velocityY = Math.abs(event.nativeEvent.velocity?.y ?? 0);
+    if (velocityY < 0.05) {
+      recenterToMiddleCopy(event.nativeEvent.contentOffset.y);
+    }
+  };
 
   const openModal = (item: PhotoItem, origin: LayoutBox | null) => {
     const fallbackOrigin = {
@@ -376,33 +355,28 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar hidden />
-      {Constants.appOwnership !== "expo" && (
-        <Suspense fallback={null}>
-          <AmbientGlowLazy
-            scrollY={scrollY}
-            colors={imageColors}
-            itemFullSize={itemFullSize}
-            centerY={centerY}
-            width={width}
-            height={height}
-          />
-        </Suspense>
-      )}
       <Animated.FlatList
         ref={listRef}
-        initialScrollIndex={LOOP_N}
+        initialScrollIndex={Math.floor(LOOP_COPIES / 2) * LOOP_N}
         snapToInterval={itemFullSize}
-        decelerationRate={0.994}
         snapToAlignment="center"
+        decelerationRate={INERTIAL_SCROLL_CONFIG.decelerationRate}
+        bounces={INERTIAL_SCROLL_CONFIG.bounces}
+        bouncesZoom={INERTIAL_SCROLL_CONFIG.bouncesZoom}
+        nestedScrollEnabled={INERTIAL_SCROLL_CONFIG.nestedScrollEnabled}
+        overScrollMode={INERTIAL_SCROLL_CONFIG.overScrollMode}
+        disableIntervalMomentum={INERTIAL_SCROLL_CONFIG.disableIntervalMomentum}
         data={LOOP_DATA}
         keyExtractor={(_, index) => `tile-${index}`}
         getItemLayout={(_, index) => ({
           length: itemFullSize,
-          offset: contentPadding + index * itemFullSize,
+          offset: index * itemFullSize,
           index,
         })}
         showsVerticalScrollIndicator={false}
         onScroll={onScroll}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        onScrollEndDrag={onScrollEndDrag}
         scrollEventThrottle={8}
         removeClippedSubviews={false}
         contentContainerStyle={[
