@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -7,10 +7,12 @@ import {
   NativeSyntheticEvent,
   Pressable,
   StyleSheet,
+  Text,
   useWindowDimensions,
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { getRandomPetNames, inferPetKindFromLabel } from "@/constants/pet-names";
 import { INERTIAL_SCROLL_CONFIG } from "@/constants/scroll";
 import { fetchUnsplashPhotos } from "@/services/unsplash";
 import Animated, {
@@ -18,6 +20,7 @@ import Animated, {
   interpolate,
   runOnJS,
   SharedValue,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
@@ -106,7 +109,37 @@ const SAMPLE_PHOTOS: PhotoItem[] = [
   },
 ];
 
-const ARC_SCALE = 1.5;
+const withRandomPetNames = (items: PhotoItem[]) => {
+  const catCount = items.filter(
+    (item) => inferPetKindFromLabel(item.label) === "cat",
+  ).length;
+  const dogCount = items.filter(
+    (item) => inferPetKindFromLabel(item.label) === "dog",
+  ).length;
+
+  const catNames = getRandomPetNames("cat", catCount);
+  const dogNames = getRandomPetNames("dog", dogCount);
+
+  let catIndex = 0;
+  let dogIndex = 0;
+
+  return items.map((item) => {
+    const petKind = inferPetKindFromLabel(item.label);
+    if (petKind === "dog") {
+      const dogName = dogNames[dogIndex % dogNames.length];
+      dogIndex += 1;
+      return { ...item, label: dogName };
+    }
+
+    const catName = catNames[catIndex % catNames.length];
+    catIndex += 1;
+    return { ...item, label: catName };
+  });
+};
+
+const SAMPLE_PHOTOS_WITH_NAMES = withRandomPetNames(SAMPLE_PHOTOS);
+
+const ARC_SCALE = 1.9;
 const MOTION_BOOST = 1.05;
 const ARC_EDGE_SOFTEN = 0.98;
 const IMG_ASPECT = 2 / 3; // Source images are 1200x1800
@@ -115,7 +148,8 @@ const LOOP_COPIES = 5;
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
-  const [photos, setPhotos] = useState<PhotoItem[]>(SAMPLE_PHOTOS);
+  const [photos, setPhotos] = useState<PhotoItem[]>(SAMPLE_PHOTOS_WITH_NAMES);
+  const [focusedName, setFocusedName] = useState(SAMPLE_PHOTOS_WITH_NAMES[0]?.label ?? "");
   const loopN = photos.length;
   const loopData = useMemo(
     () => Array.from({ length: LOOP_COPIES }, () => photos).flat(),
@@ -165,11 +199,19 @@ export default function HomeScreen() {
   }, []);
 
   useEffect(() => {
+    setFocusedName(photos[0]?.label ?? "");
+  }, [photos]);
+
+  useEffect(() => {
     scrollY.value = initialLoopOffset;
     listRef.current?.scrollToOffset({ offset: initialLoopOffset, animated: false });
   }, [initialLoopOffset, scrollY]);
 
   const recenterToMiddleCopy = (offsetY: number) => {
+    if (loopN === 0 || loopAmount === 0) {
+      return;
+    }
+
     const wrappedOffset = ((offsetY % loopAmount) + loopAmount) % loopAmount;
     const nextOffset = initialLoopOffset + wrappedOffset;
     if (Math.abs(nextOffset - offsetY) < 1) {
@@ -179,6 +221,31 @@ export default function HomeScreen() {
     listRef.current?.scrollToOffset({ offset: nextOffset, animated: false });
     scrollY.value = nextOffset;
   };
+
+  const updateFocusedName = useCallback(
+    (rawIndex: number) => {
+      if (loopN === 0) {
+        return;
+      }
+
+      const normalizedIndex = ((rawIndex % loopN) + loopN) % loopN;
+      const nextName = photos[normalizedIndex]?.label ?? "";
+      setFocusedName((currentName) =>
+        currentName === nextName ? currentName : nextName,
+      );
+    },
+    [loopN, photos],
+  );
+
+  useAnimatedReaction(
+    () => Math.round(scrollY.value / itemFullSize),
+    (currentIndex, previousIndex) => {
+      if (currentIndex !== previousIndex) {
+        runOnJS(updateFocusedName)(currentIndex);
+      }
+    },
+    [itemFullSize, updateFocusedName],
+  );
 
   const onScroll = useAnimatedScrollHandler({
     onScroll: (event) => {
@@ -428,6 +495,11 @@ export default function HomeScreen() {
           />
         )}
       />
+      {!modalVisible && focusedName ? (
+        <View pointerEvents="none" style={styles.focusNameLayer}>
+          <Text style={styles.focusNameText}>{focusedName}</Text>
+        </View>
+      ) : null}
       <Modal
         transparent
         visible={modalVisible}
@@ -583,7 +655,7 @@ function DialItem({
     const overlayOpacity = interpolate(
       distanceFromCenter,
       [0, 0.5, 1],
-      [0, 0.16, 0.45],
+      [0, 0.24, 0.6],
       Extrapolate.CLAMP,
     );
 
@@ -625,6 +697,22 @@ const styles = StyleSheet.create({
   },
   itemWrap: {
     justifyContent: "center",
+  },
+  focusNameLayer: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    paddingLeft: 2,
+  },
+  focusNameText: {
+    color: "#ffffff",
+    fontFamily: "Miniver",
+    fontSize: 20,
+    fontWeight: "600",
+    letterSpacing: 0.2,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowRadius: 4,
+    textShadowOffset: { width: 0, height: 1 },
   },
   card: {
     borderRadius: 24,

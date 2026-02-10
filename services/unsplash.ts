@@ -1,7 +1,7 @@
+import { getRandomPetNames, PetKind } from "@/constants/pet-names";
+
 type UnsplashPhoto = {
   id: string;
-  alt_description: string | null;
-  description: string | null;
   urls: {
     raw?: string;
     regular?: string;
@@ -20,14 +20,6 @@ const UNSPLASH_ENDPOINT = "https://api.unsplash.com/photos/random";
 const CAT_QUERY = "cats";
 const DOG_QUERY = "dogs";
 
-const toTitleCase = (value: string) =>
-  value
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-
 const withImageParams = (url: string) => {
   const separator = url.includes("?") ? "&" : "?";
   return `${url}${separator}auto=format&fit=crop&w=1200&h=1800&q=90`;
@@ -36,7 +28,7 @@ const withImageParams = (url: string) => {
 const mapToPhotoItem = (
   photo: UnsplashPhoto,
   index: number,
-  fallbackPrefix: string,
+  names: string[],
 ): UnsplashPhotoItem | null => {
   const sourceUrl =
     photo.urls.raw ?? photo.urls.regular ?? photo.urls.full ?? photo.urls.small;
@@ -44,13 +36,10 @@ const mapToPhotoItem = (
     return null;
   }
 
-  const rawLabel =
-    photo.alt_description ?? photo.description ?? `${fallbackPrefix} ${index + 1}`;
-
   return {
     id: `unsplash-${photo.id}-${index}`,
     uri: withImageParams(sourceUrl),
-    label: toTitleCase(rawLabel),
+    label: names[index % names.length],
   };
 };
 
@@ -58,11 +47,12 @@ async function fetchByQuery(
   query: string,
   count: number,
   accessKey: string,
-  fallbackPrefix: string,
+  petKind: PetKind,
 ): Promise<UnsplashPhotoItem[]> {
   if (count <= 0) {
     return [];
   }
+  const names = getRandomPetNames(petKind, count);
   const params = [
     `count=${encodeURIComponent(String(count))}`,
     "orientation=portrait",
@@ -83,7 +73,7 @@ async function fetchByQuery(
   const payload = (await response.json()) as UnsplashPhoto | UnsplashPhoto[];
   const photos = Array.isArray(payload) ? payload : [payload];
   return photos
-    .map((photo, index) => mapToPhotoItem(photo, index, fallbackPrefix))
+    .map((photo, index) => mapToPhotoItem(photo, index, names))
     .filter((photo): photo is UnsplashPhotoItem => photo !== null);
 }
 
@@ -112,8 +102,8 @@ export async function fetchUnsplashPhotos(
   const catCount = Math.ceil(count / 2);
   const dogCount = Math.floor(count / 2);
   const [catsResult, dogsResult] = await Promise.allSettled([
-    fetchByQuery(CAT_QUERY, catCount, accessKey, "Cat"),
-    fetchByQuery(DOG_QUERY, dogCount, accessKey, "Dog"),
+    fetchByQuery(CAT_QUERY, catCount, accessKey, "cat"),
+    fetchByQuery(DOG_QUERY, dogCount, accessKey, "dog"),
   ]);
 
   const cats = catsResult.status === "fulfilled" ? catsResult.value : [];
