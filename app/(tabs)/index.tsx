@@ -1,5 +1,5 @@
 import { StatusBar } from "expo-status-bar";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Image,
   Modal,
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { INERTIAL_SCROLL_CONFIG } from "@/constants/scroll";
+import { fetchUnsplashPhotos } from "@/services/unsplash";
 import Animated, {
   Extrapolate,
   interpolate,
@@ -40,68 +41,68 @@ type LayoutBox = {
 const SAMPLE_PHOTOS: PhotoItem[] = [
   {
     id: "1",
-    uri: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Alps",
+    uri: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
   {
     id: "2",
-    uri: "https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Summit",
+    uri: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Dog",
   },
   {
     id: "3",
-    uri: "https://images.unsplash.com/photo-1518173946687-a4c036bc3b25?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Autumn",
+    uri: "https://images.unsplash.com/photo-1494256997604-768d1f608cac?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
   {
     id: "4",
-    uri: "https://images.unsplash.com/photo-1433086966358-54859d0ed716?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Waterfall",
+    uri: "https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Dog",
   },
   {
     id: "5",
-    uri: "https://images.unsplash.com/photo-1472214103451-9374bd1c798e?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Valley",
+    uri: "https://images.unsplash.com/photo-1511044568932-338cba0ad803?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
   {
     id: "6",
-    uri: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Forest",
+    uri: "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Dog",
   },
   {
     id: "7",
-    uri: "https://images.unsplash.com/photo-1470071459604-3b5ec3a7fe05?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Foggy",
+    uri: "https://images.unsplash.com/photo-1574158622682-e40e69881006?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
   {
     id: "8",
-    uri: "https://images.unsplash.com/photo-1426604966848-d7adac402bff?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Lake",
+    uri: "https://images.unsplash.com/photo-1583512603806-077998240c7a?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Dog",
   },
   {
     id: "9",
-    uri: "https://images.unsplash.com/photo-1465056836041-7f43ac27dcb5?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Canyon",
+    uri: "https://images.unsplash.com/photo-1513245543132-31f507417b26?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
   {
     id: "10",
-    uri: "https://images.unsplash.com/photo-1414609245224-afa02bfb3fda?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Peak",
+    uri: "https://images.unsplash.com/photo-1507146426996-ef05306b995a?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Dog",
   },
   {
     id: "11",
-    uri: "https://images.unsplash.com/photo-1439853949127-fa647f8c5c6b?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Sunset",
+    uri: "https://images.unsplash.com/photo-1533738363-b7f9aef128ce?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
   {
     id: "12",
-    uri: "https://images.unsplash.com/photo-1501854140801-50d01698950b?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Hills",
+    uri: "https://images.unsplash.com/photo-1537151625747-768eb6cf92b2?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Dog",
   },
   {
     id: "13",
-    uri: "https://images.unsplash.com/photo-1505144808419-1957a94ca61e?auto=format&fit=crop&w=1200&h=1800&q=90",
-    label: "Beach",
+    uri: "https://images.unsplash.com/photo-1472491235688-bdc81a63246e?auto=format&fit=crop&w=1200&h=1800&q=90",
+    label: "Cat",
   },
 ];
 
@@ -111,11 +112,15 @@ const ARC_EDGE_SOFTEN = 0.98;
 const IMG_ASPECT = 2 / 3; // Source images are 1200x1800
 
 const LOOP_COPIES = 5;
-const LOOP_DATA: PhotoItem[] = Array.from({ length: LOOP_COPIES }, () => SAMPLE_PHOTOS).flat();
-const LOOP_N = SAMPLE_PHOTOS.length;
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
+  const [photos, setPhotos] = useState<PhotoItem[]>(SAMPLE_PHOTOS);
+  const loopN = photos.length;
+  const loopData = useMemo(
+    () => Array.from({ length: LOOP_COPIES }, () => photos).flat(),
+    [photos],
+  );
   const itemFullSize = height / 9;
   const itemSize = Math.min(itemFullSize * 0.84, width * 0.336);
   const radius = Math.max((height - itemSize) / 2, itemSize) * ARC_SCALE;
@@ -123,8 +128,8 @@ export default function HomeScreen() {
   const baseX = (width - itemSize) / 2 + 16;
 
   const contentPadding = (height - itemFullSize) / 2;
-  const initialLoopOffset = Math.floor(LOOP_COPIES / 2) * LOOP_N * itemFullSize;
-  const loopAmount = LOOP_N * itemFullSize;
+  const initialLoopOffset = Math.floor(LOOP_COPIES / 2) * loopN * itemFullSize;
+  const loopAmount = loopN * itemFullSize;
   const scrollY = useSharedValue(initialLoopOffset);
   const listRef = useRef<Animated.FlatList<PhotoItem>>(null);
   const [activePhoto, setActivePhoto] = useState<PhotoItem | null>(null);
@@ -138,6 +143,31 @@ export default function HomeScreen() {
   const imageH = useSharedValue(0);
   const dragY = useSharedValue(0);
   const originRef = useRef<LayoutBox | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadPhotos = async () => {
+      try {
+        const fetchedPhotos = await fetchUnsplashPhotos(SAMPLE_PHOTOS.length);
+        if (isMounted && fetchedPhotos.length > 0) {
+          setPhotos(fetchedPhotos);
+        }
+      } catch (error) {
+        console.warn("Failed to fetch Unsplash photos", error);
+      }
+    };
+
+    loadPhotos();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    scrollY.value = initialLoopOffset;
+    listRef.current?.scrollToOffset({ offset: initialLoopOffset, animated: false });
+  }, [initialLoopOffset, scrollY]);
 
   const recenterToMiddleCopy = (offsetY: number) => {
     const wrappedOffset = ((offsetY % loopAmount) + loopAmount) % loopAmount;
@@ -357,7 +387,7 @@ export default function HomeScreen() {
       <StatusBar hidden />
       <Animated.FlatList
         ref={listRef}
-        initialScrollIndex={Math.floor(LOOP_COPIES / 2) * LOOP_N}
+        initialScrollIndex={Math.floor(LOOP_COPIES / 2) * loopN}
         snapToInterval={itemFullSize}
         snapToAlignment="center"
         decelerationRate={INERTIAL_SCROLL_CONFIG.decelerationRate}
@@ -366,7 +396,7 @@ export default function HomeScreen() {
         nestedScrollEnabled={INERTIAL_SCROLL_CONFIG.nestedScrollEnabled}
         overScrollMode={INERTIAL_SCROLL_CONFIG.overScrollMode}
         disableIntervalMomentum={INERTIAL_SCROLL_CONFIG.disableIntervalMomentum}
-        data={LOOP_DATA}
+        data={loopData}
         keyExtractor={(_, index) => `tile-${index}`}
         getItemLayout={(_, index) => ({
           length: itemFullSize,
@@ -545,8 +575,19 @@ function DialItem({
 
     const relativeY = itemCenterY - scrollY.value;
     const offsetFromCenter = relativeY - centerY;
-    const isFocused = Math.abs(offsetFromCenter) < itemFullSize * 0.35;
-    return { opacity: isFocused ? 0 : 0.45 };
+    const distanceFromCenter = Math.min(
+      Math.abs(offsetFromCenter) / itemFullSize,
+      1,
+    );
+
+    const overlayOpacity = interpolate(
+      distanceFromCenter,
+      [0, 0.5, 1],
+      [0, 0.16, 0.45],
+      Extrapolate.CLAMP,
+    );
+
+    return { opacity: overlayOpacity };
   });
 
   return (
