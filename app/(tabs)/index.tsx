@@ -168,6 +168,7 @@ export default function HomeScreen() {
   const listRef = useRef<Animated.FlatList<PhotoItem>>(null);
   const [activePhoto, setActivePhoto] = useState<PhotoItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
+  const [showModalName, setShowModalName] = useState(false);
   const modalOpacity = useSharedValue(0);
   const backdropOpacity = useSharedValue(0);
   const openProgress = useSharedValue(0);
@@ -280,6 +281,7 @@ export default function HomeScreen() {
 
     originRef.current = safeOrigin;
     setActivePhoto(item);
+    setShowModalName(true);
     setModalVisible(true);
     modalOpacity.value = 1;
     backdropOpacity.value = 0;
@@ -313,6 +315,7 @@ export default function HomeScreen() {
   };
 
   const closeModal = () => {
+    setShowModalName(false);
     const origin = originRef.current;
     if (!origin) {
       modalOpacity.value = withTiming(0, { duration: 220 });
@@ -495,11 +498,12 @@ export default function HomeScreen() {
           />
         )}
       />
-      {!modalVisible && focusedName ? (
-        <View pointerEvents="none" style={styles.focusNameLayer}>
-          <Text style={styles.focusNameText}>{focusedName}</Text>
-        </View>
-      ) : null}
+      <View
+        pointerEvents="none"
+        style={[styles.focusNameLayer, { opacity: focusedName ? 1 : 0 }]}
+      >
+        <Text style={styles.focusNameText}>{focusedName}</Text>
+      </View>
       <Modal
         transparent
         visible={modalVisible}
@@ -516,6 +520,13 @@ export default function HomeScreen() {
                   style={innerImageStyle}
                   resizeMode="cover"
                 />
+                {showModalName ? (
+                  <View pointerEvents="none" style={styles.modalNameWrap}>
+                    <View style={styles.modalNameBadge}>
+                      <Text style={styles.modalNameText}>{activePhoto.label}</Text>
+                    </View>
+                  </View>
+                ) : null}
               </Animated.View>
             </GestureDetector>
           ) : null}
@@ -754,6 +765,28 @@ const styles = StyleSheet.create({
   },
   modalTapLayer: {
     ...StyleSheet.absoluteFillObject,
+  },
+  modalNameWrap: {
+    position: "absolute",
+    left: 0,
+    bottom: 24,
+    right: 0,
+    alignItems: "center",
+  },
+  modalNameBadge: {
+    backgroundColor: "rgba(0,0,0,0.52)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  modalNameText: {
+    color: "#ffffff",
+    fontFamily: "Miniver",
+    fontSize: 22,
+    fontWeight: "600",
+    textShadowColor: "rgba(0,0,0,0.6)",
+    textShadowRadius: 5,
+    textShadowOffset: { width: 0, height: 2 },
   },
   modalImage: {
     position: "absolute",
